@@ -16,45 +16,51 @@ if 'total_hours' not in st.session_state:
     st.session_state.total_hours = 0.0
 if 'entries' not in st.session_state:
     st.session_state.entries = []
+if 'input_hours' not in st.session_state:
+    st.session_state.input_hours = None
 
-# إدخال عدد الساعات
-hours_worked = st.number_input("عدد الساعات التي عملتها اليوم:", min_value=0.0, step=0.5)
+# إدخال عدد الساعات (بدون قيمة افتراضية)
+hours_worked = st.number_input("عدد الساعات التي عملتها اليوم:", min_value=0.0, step=0.5, value=st.session_state.input_hours, key="input_hours")
 
 # خيار اختياري: هل هذا اليوم هو يوم جمعة؟
 is_friday = st.checkbox("هل هذا اليوم هو يوم جمعة؟")
 
 # زر الحساب
 if st.button("حساب"):
-    # حساب الراتب لهذا اليوم
-    regular_rate = 14
-    overtime_rate = 21
-    friday_rate = 21
+    if hours_worked is not None and hours_worked > 0:
+        # حساب الراتب لهذا اليوم
+        regular_rate = 14
+        overtime_rate = 21
+        friday_rate = 21
 
-    if hours_worked <= 8:
-        regular = hours_worked
-        overtime = 0
-    else:
-        regular = 8
-        overtime = hours_worked - 8
+        if hours_worked <= 8:
+            regular = hours_worked
+            overtime = 0
+        else:
+            regular = 8
+            overtime = hours_worked - 8
 
-    salary = (regular * regular_rate) + (overtime * overtime_rate)
+        salary = (regular * regular_rate) + (overtime * overtime_rate)
 
-    # إذا كان يوم جمعة، نحسب كل الساعات بسعر الجمعة
-    if is_friday:
-        salary = hours_worked * friday_rate
+        # إذا كان يوم جمعة، نحسب كل الساعات بسعر الجمعة
+        if is_friday:
+            salary = hours_worked * friday_rate
 
-    # تحديث الإجماليات
-    st.session_state.total_salary += salary
-    st.session_state.total_hours += hours_worked
-    st.session_state.entries.append({
-        "hours": hours_worked,
-        "is_friday": is_friday,
-        "salary": salary
-    })
+        # تحديث الإجماليات
+        st.session_state.total_salary += salary
+        st.session_state.total_hours += hours_worked
+        st.session_state.entries.append({
+            "hours": hours_worked,
+            "is_friday": is_friday,
+            "salary": salary
+        })
 
-    # عرض نتيجة اليوم الحالي
-    st.success(f"تم حساب اليوم: {salary:.2f} شيقل")
-    st.info(f"الإجمالي حتى الآن: {st.session_state.total_salary:.2f} شيقل")
+        # تفريغ خانة الإدخال
+        st.session_state.input_hours = None
+
+        # عرض نتيجة اليوم الحالي
+        st.success(f"تم حساب اليوم: {salary:.2f} شيقل")
+        st.info(f"الإجمالي حتى الآن: {st.session_state.total_salary:.2f} شيقل")
 
 # عرض ملخص المدخلات عند الانتهاء
 if st.session_state.entries:
@@ -72,4 +78,5 @@ if st.button("إعادة التشغيل من جديد"):
     st.session_state.total_salary = 0.0
     st.session_state.total_hours = 0.0
     st.session_state.entries = []
+    st.session_state.input_hours = None
     st.experimental_rerun()

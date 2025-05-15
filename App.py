@@ -3,50 +3,40 @@ import streamlit as st
 # عنوان التطبيق
 st.title("حاسبة الراتب اليومية")
 
-# شرح القواعد
 st.write("أدخل عدد الساعات التي عملتها يوميًا، وسنحسب لك الراتب الإجمالي بناءً على القواعد التالية:")
 st.write("- 8 ساعات عادية: 14 شيقل/ساعة")
 st.write("- الساعات الإضافية: 21 شيقل/ساعة (ساعة ونصف)")
 st.write("- يمكنك إضافة ساعات ليوم الجمعة بشكل منفصل (اختياري).")
 
-# تخزين البيانات عبر الجلسات
+# تهيئة الحالة
 if 'total_salary' not in st.session_state:
     st.session_state.total_salary = 0.0
 if 'total_hours' not in st.session_state:
     st.session_state.total_hours = 0.0
 if 'entries' not in st.session_state:
     st.session_state.entries = []
-if 'input_hours' not in st.session_state:
-    st.session_state.input_hours = None
 
-# إدخال عدد الساعات (بدون قيمة افتراضية)
-hours_worked = st.number_input("عدد الساعات التي عملتها اليوم:", min_value=0.0, step=0.5, value=st.session_state.input_hours, key="input_hours")
-
-# خيار اختياري: هل هذا اليوم هو يوم جمعة؟
-is_friday = st.checkbox("هل هذا اليوم هو يوم جمعة؟")
+# استخدام مفتاح مميز للحقل، مع عدم استخدام session_state لتغييره يدوياً
+hours_worked = st.number_input("عدد الساعات التي عملتها اليوم:", min_value=0.0, step=0.5, key="hours_input")
+is_friday = st.checkbox("هل هذا اليوم هو يوم جمعة؟", key="friday_input")
 
 # زر الحساب
 if st.button("حساب"):
-    if hours_worked is not None and hours_worked > 0:
-        # حساب الراتب لهذا اليوم
+    if hours_worked > 0:
+        # الحساب
         regular_rate = 14
         overtime_rate = 21
         friday_rate = 21
 
-        if hours_worked <= 8:
-            regular = hours_worked
-            overtime = 0
-        else:
-            regular = 8
-            overtime = hours_worked - 8
-
-        salary = (regular * regular_rate) + (overtime * overtime_rate)
-
-        # إذا كان يوم جمعة، نحسب كل الساعات بسعر الجمعة
         if is_friday:
             salary = hours_worked * friday_rate
+        else:
+            if hours_worked <= 8:
+                salary = hours_worked * regular_rate
+            else:
+                salary = (8 * regular_rate) + ((hours_worked - 8) * overtime_rate)
 
-        # تحديث الإجماليات
+        # التحديث
         st.session_state.total_salary += salary
         st.session_state.total_hours += hours_worked
         st.session_state.entries.append({
@@ -55,11 +45,13 @@ if st.button("حساب"):
             "salary": salary
         })
 
-        # تفريغ خانة الإدخال
-        st.session_state.input_hours = None
+        st.success(f"تم حساب اليوم: {salary:.2f} شيقل")
+        st.info(f"الإجمالي حتى الآن: {st.session_state.total_salary:.2f} شيقل")
+
+        # إعادة ضبط المدخلات باستخدام إعادة التشغيل
         st.experimental_rerun()
 
-# عرض ملخص المدخلات
+# عرض الملخص
 if st.session_state.entries:
     st.subheader("ملخص المدخلات:")
     for idx, entry in enumerate(st.session_state.entries):
@@ -70,7 +62,7 @@ if st.session_state.entries:
     st.markdown(f"**عدد الساعات الكلي:** {st.session_state.total_hours:.2f} ساعة")
     st.markdown(f"**الراتب الكلي:** {st.session_state.total_salary:.2f} شيقل")
 
-# زر التراجع عن الإضافة الأخيرة
+# زر التراجع
 if st.button("التراجع عن الإضافة الأخيرة"):
     if st.session_state.entries:
         last_entry = st.session_state.entries.pop()
@@ -79,7 +71,8 @@ if st.button("التراجع عن الإضافة الأخيرة"):
         st.success("تم التراجع عن آخر إضافة.")
         st.experimental_rerun()
 
-# زر إعادة التشغيل من جديد
+# زر إعادة التشغيل
 if st.button("إعادة التشغيل من جديد"):
-    st.session_state.clear()
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
     st.experimental_rerun()

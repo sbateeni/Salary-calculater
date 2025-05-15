@@ -8,13 +8,23 @@ import json
 DATA_FILE = "data.json"
 
 # --- دوال المساعدة ---
+def time_to_decimal(t):
+    h, m = map(int, t.split(':'))
+    return h + m / 60
+
+def calculate_hours(entry, exit_time):
+    start = datetime.strptime(entry, "%H:%M")
+    end = datetime.strptime(exit_time, "%H:%M")
+    delta = (end - start).seconds / 3600
+    if delta < 0:
+        delta += 24  # لدعم الدوام الليلي
+    return round(delta, 2)
+
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f).get("entries", [])
             df = pd.DataFrame(data)
-            # تحويل التاريخ إلى datetime لتجنب الأخطاء
-            df['التاريخ الميلادي'] = pd.to_datetime(df['التاريخ الميلادي'], errors='coerce')
             return df
     else:
         return pd.DataFrame(columns=[
@@ -23,123 +33,113 @@ def load_data():
             "تكلفة العادية", "تكلفة الإضافية", "التكلفة الكلية", "الساعات المحتسبة"
         ])
 
-
-def save_data(df):
-    data = {"entries": df.to_dict(orient="records")}
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
 # --- واجهة المستخدم ---
 st.set_page_config(layout="wide")
-st.title("حاسبة المرتبات - مع دعم JSON")
+st.title("حاسبة المرتبات - مع إعادة الحساب التلقائي")
 
-st.markdown("يمكنك إضافة أو تعديل البيانات أدناه. يتم حفظ البيانات في ملف `data.json`. يمكنك إضافة أيام جديدة شهريًا.")
+st.markdown("يتم الآن إعادة الحساب التلقائي للراتب بناءً على قواعد العمل: 14 شيكل للساعة العادية، 21 شيكل للساعة الإضافية.")
 
 # --- تحميل البيانات ---
 df = load_data()
 
-# --- ضمان أن التاريخ بصيغة صحيحة ---
 if not df.empty:
-    df['التاريخ الميلادي'] = pd.to_datetime(df['التاريخ الميلادي'], errors='coerce')
+    # --- إعادة الحساب التلقائي ---
+    updated_rows = []
+    for _, row in df.iterrows():
+        date_str = row["التاريخ الميلادي"]
+        entry = row["وقت الدخول"]
+        exit_t = row["وقت الخروج"]
 
-# --- جدول التحرير ---
-st.subheader("تحرير البيانات")
-edited_df = st.data_editor(
-    df,
-    num_rows="dynamic",
-    column_config={
-        "التاريخ الميلادي": st.column_config.DateColumn(
-            "التاريخ الميلادي",
-            format="YYYY-MM-DD",
-            min_value=datetime(2020, 1, 1),
-            max_value=datetime(2030, 12, 31),
-            default=datetime.today()
-        ),
-        "وقت الدخول": st.column_config.TextColumn("وقت الدخول", default="00:00"),
-        "وقت الخروج": st.column_config.TextColumn("وقت الخروج", default="00:00"),
-        "عدد الساعات": st.column_config.NumberColumn("عدد الساعات", step=0.1),
-        "الساعات العادية": st.column_config.NumberColumn("الساعات العادية", step=0.1),
-        "الساعات الإضافية": st.column_config.NumberColumn("الساعات الإضافية", step=0.1),
-        "تكلفة العادية": st.column_config.NumberColumn("تكلفة العادية", step=1.0),
-        "تكلفة الإضافية": st.column_config.NumberColumn("تكلفة الإضافية", step=1.0),
-        "التكلفة الكلية": st.column_config.NumberColumn("التكلفة الكلية", step=1.0),
-        "الساعات المحتسبة": st.column_config.NumberColumn("الساعات المحتسبة", step=0.1)
-    },
-    use_container_width=True
-)
+        if pd.isna(date_str) or pd.isna(entry) or pd.isna(exit_t):
+            continue
 
-# --- زر الحفظ ---
-if st.button("💾 حفظ البيانات"):
-    # تحويل التاريخ إلى نص قبل الحفظ
-    edited_df['التاريخ الميلادي'] = pd.to_datetime(edited_df['التاريخ الميلادي'], errors='coerce').dt.strftime('%Y-%m-%d')
-    edited_df.fillna({
-        'وقت الدخول': '00:00',
-        'وقت الخروج': '00:00',
-        'عدد الساعات': 0,
-        'الساعات العادية': 0,
-        'الساعات الإضافية': 0,
-        'تكلفة العادية': 0,
-        'تكلفة الإضافية': 0,
-        'التكلفة الكلية': 0,
-        'الساعات المحتسبة': 0
-    }, inplace=True)
+        hours_worked = calculate_hours(entry, exit_t)
+        regular = min(hours_worked, 8)
+        extra = max(0, hours_worked - 8)
+        cost_regular = regular * 14
+        cost_extra = extra * 21
+        total_cost = cost_regular + cost_extra
+        counted_hours = regular + extra * 1.5
 
-    # حفظ البيانات
-    data_to_save = edited_df.copy()
-    save_data(data_to_save)
-    st.success("✅ تم حفظ البيانات بنجاح في ملف data.json")
+        updated_rows.append({
+            "التاريخ الميلادي": date_str,
+            "وقت الدخول": entry,
+            "وقت الخروج": exit_t,
+            "عدد الساعات": hours_worked,
+            "الساعات العادية": regular,
+            "الساعات الإضافية": extra,
+            "تكلفة العادية": cost_regular,
+            "تكلفة الإضافية": cost_extra,
+            "التكلفة الكلية": total_cost,
+            "الساعات المحتسبة": counted_hours
+        })
 
+    if updated_rows:
+        final_df = pd.DataFrame(updated_rows)
 
-# --- جدول إحصائي شهري ---
-if not edited_df.empty:
-    edited_df['التاريخ الميلادي'] = pd.to_datetime(edited_df['التاريخ الميلادي'], errors='coerce')
-    edited_df['الشهر'] = edited_df['التاريخ الميلادي'].dt.strftime('%B %Y')  # أبريل 2025
+        # --- استخلاص الشهر ---
+        final_df['التاريخ الميلادي'] = pd.to_datetime(final_df['التاريخ الميلادي'], errors='coerce')
+        final_df['الشهر'] = final_df['التاريخ الميلادي'].dt.strftime('%B %Y')
 
-    month_map = {
-        'January': 'يناير',
-        'February': 'فبراير',
-        'March': 'مارس',
-        'April': 'أبريل',
-        'May': 'مايو',
-        'June': 'يونيو',
-        'July': 'يوليو',
-        'August': 'أغسطس',
-        'September': 'سبتمبر',
-        'October': 'أكتوبر',
-        'November': 'نوفمبر',
-        'December': 'ديسمبر'
-    }
+        month_map = {
+            'January': 'يناير',
+            'February': 'فبراير',
+            'March': 'مارس',
+            'April': 'أبريل',
+            'May': 'مايو',
+            'June': 'يونيو',
+            'July': 'يوليو',
+            'August': 'أغسطس',
+            'September': 'سبتمبر',
+            'October': 'أكتوبر',
+            'November': 'نوفمبر',
+            'December': 'ديسمبر'
+        }
 
-    def rename_month(month_en):
-        for eng, arabic in month_map.items():
-            if eng in month_en:
-                return arabic + month_en[month_en.find(' '):]
-        return month_en
+        def rename_month(month_en):
+            return month_map.get(month_en.split()[0], month_en) + " " + month_en.split()[1]
 
-    edited_df['الشهر'] = edited_df['الشهر'].apply(rename_month)
+        final_df['الشهر'] = final_df['الشهر'].apply(rename_month)
 
-    monthly_stats = edited_df.groupby("الشهر").agg(
-        مجموع_الساعات_العاديه=("الساعات العادية", "sum"),
-        مجموع_الساعات_الإضافية=("الساعات الإضافية", "sum"),
-        مجموع_التكاليف=("التكلفة الكلية", "sum")
-    ).reset_index()
+        # --- عرض الجدول النهائي ---
+        st.subheader("📊 الجدول النهائي بعد الحساب التلقائي")
+        st.dataframe(final_df.drop(columns=['الشهر']), use_container_width=True)
 
-    st.subheader("📅 إحصائيات شهرية")
-    st.dataframe(monthly_stats, use_container_width=True)
+        # --- إحصائيات شهرية ---
+        monthly_stats = final_df.groupby("الشهر").agg(
+            مجموع_الساعات_العاديه=("الساعات العادية", "sum"),
+            مجموع_الساعات_الإضافية=("الساعات الإضافية", "sum"),
+            مجموع_التكاليف=("التكلفة الكلية", "sum")
+        ).reset_index()
 
-    # --- تنزيل CSV ---
-    @st.cache_data
-    def convert_df(data):
-        return data.to_csv(index=False).encode('utf-8')
+        st.subheader("📅 إحصائيات شهرية")
+        st.dataframe(monthly_stats, use_container_width=True)
 
-    csv_full = convert_df(edited_df.drop(columns=['الشهر'], errors='ignore'))
-    csv_monthly = convert_df(monthly_stats)
+        # --- تنزيل CSV ---
+        @st.cache_data
+        def convert_df(data):
+            return data.to_csv(index=False).encode('utf-8')
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button("📥 تحميل الجدول كـ CSV", data=csv_full, file_name="الجدول_النهائي.csv", mime="text/csv")
-    with col2:
-        st.download_button("📊 تحميل الإحصائيات الشهرية", data=csv_monthly, file_name="الاحصائيات_الشهرية.csv", mime="text/csv")
+        csv_full = convert_df(final_df)
+        csv_monthly = convert_df(monthly_stats)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button("📥 تحميل الجدول كـ CSV", data=csv_full, file_name="الجدول_النهائي.csv", mime="text/csv")
+        with col2:
+            st.download_button("📊 تحميل الإحصائيات الشهرية", data=csv_monthly, file_name="الاحصائيات_الشهرية.csv", mime="text/csv")
+
+        # --- عرض الإجمالي العام ---
+        total_regular = monthly_stats["مجموع_الساعات_العاديه"].sum()
+        total_extra = monthly_stats["مجموع_الساعات_الإضافية"].sum()
+        total_salary = monthly_stats["مجموع_التكاليف"].sum()
+
+        st.markdown("---")
+        st.subheader("💰 الإجمالي العام")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("مجموع الساعات العادية", f"{total_regular:.2f} ساعة")
+        col2.metric("مجموع الساعات الإضافية", f"{total_extra:.2f} ساعة")
+        col3.metric("الراتب الإجمالي الشهري", f"{total_salary:.2f} شيكل")
+
 else:
-    st.warning("⚠️ لا توجد بيانات بعد. أضف بعض السجلات لتحصل على تحليل شهري.")
+    st.warning("⚠️ لا توجد بيانات في ملف JSON. تأكد من وجود بيانات صحيحة.")

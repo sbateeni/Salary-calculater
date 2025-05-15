@@ -57,12 +57,9 @@ if st.button("حساب"):
 
         # تفريغ خانة الإدخال
         st.session_state.input_hours = None
+        st.experimental_rerun()
 
-        # عرض نتيجة اليوم الحالي
-        st.success(f"تم حساب اليوم: {salary:.2f} شيقل")
-        st.info(f"الإجمالي حتى الآن: {st.session_state.total_salary:.2f} شيقل")
-
-# عرض ملخص المدخلات عند الانتهاء
+# عرض ملخص المدخلات
 if st.session_state.entries:
     st.subheader("ملخص المدخلات:")
     for idx, entry in enumerate(st.session_state.entries):
@@ -73,10 +70,16 @@ if st.session_state.entries:
     st.markdown(f"**عدد الساعات الكلي:** {st.session_state.total_hours:.2f} ساعة")
     st.markdown(f"**الراتب الكلي:** {st.session_state.total_salary:.2f} شيقل")
 
-# زر إعادة التعيين
+# زر التراجع عن الإضافة الأخيرة
+if st.button("التراجع عن الإضافة الأخيرة"):
+    if st.session_state.entries:
+        last_entry = st.session_state.entries.pop()
+        st.session_state.total_salary -= last_entry["salary"]
+        st.session_state.total_hours -= last_entry["hours"]
+        st.success("تم التراجع عن آخر إضافة.")
+        st.experimental_rerun()
+
+# زر إعادة التشغيل من جديد
 if st.button("إعادة التشغيل من جديد"):
-    st.session_state.total_salary = 0.0
-    st.session_state.total_hours = 0.0
-    st.session_state.entries = []
-    st.session_state.input_hours = None
+    st.session_state.clear()
     st.experimental_rerun()

@@ -1,46 +1,75 @@
 import streamlit as st
 
-# العنوان الرئيسي للتطبيق
-st.title("حاسبة الراتب")
+# عنوان التطبيق
+st.title("حاسبة الراتب اليومية")
 
-# شرح التطبيق
-st.write("أدخل عدد الساعات التي عملتها، وستحسب لك القيمة بناءً على القواعد التالية:")
-st.write("- كل ساعة ≤ 8 ساعات: 14 شيقل.")
-st.write("- الساعات الإضافية (بعد 8 ساعات): 21 شيقل (1.5 × 14).")
-st.write("- إذا عملت في يوم الجمعة، فإن كل ساعة تُحسب بقيمة 21 شيقل.")
+# شرح القواعد
+st.write("أدخل عدد الساعات التي عملتها يوميًا، وسنحسب لك الراتب الإجمالي بناءً على القواعد التالية:")
+st.write("- 8 ساعات عادية: 14 شيقل/ساعة")
+st.write("- الساعات الإضافية: 21 شيقل/ساعة (ساعة ونصف)")
+st.write("- يمكنك إضافة ساعات ليوم الجمعة بشكل منفصل (اختياري).")
 
-# إدخال عدد الساعات العادية
-total_hours = st.number_input("أدخل عدد الساعات التي عملتها:", min_value=0.0, step=0.5)
+# تخزين البيانات عبر الجلسات
+if 'total_salary' not in st.session_state:
+    st.session_state.total_salary = 0.0
+if 'total_hours' not in st.session_state:
+    st.session_state.total_hours = 0.0
+if 'entries' not in st.session_state:
+    st.session_state.entries = []
 
-# إدخال عدد الساعات في يوم الجمعة (اختياري)
-friday_hours = st.number_input("أدخل عدد الساعات التي عملتها في يوم الجمعة (إذا كان هناك):", min_value=0.0, step=0.5)
+# إدخال عدد الساعات
+hours_worked = st.number_input("عدد الساعات التي عملتها اليوم:", min_value=0.0, step=0.5)
 
-# حساب الراتب
-def calculate_salary(total_hours, friday_hours):
-    # قيم الساعات
-    regular_hour_rate = 14  # قيمة الساعة العادية
-    overtime_hour_rate = 21  # قيمة الساعة الإضافية (1.5 × 14)
-    friday_hour_rate = 21  # قيمة الساعة في يوم الجمعة
+# خيار اختياري: هل هذا اليوم هو يوم جمعة؟
+is_friday = st.checkbox("هل هذا اليوم هو يوم جمعة؟")
 
-    # حساب الساعات العادية والساعات الإضافية
-    if total_hours <= 8:
-        regular_hours = total_hours
-        overtime_hours = 0
+# زر الحساب
+if st.button("حساب"):
+    # حساب الراتب لهذا اليوم
+    regular_rate = 14
+    overtime_rate = 21
+    friday_rate = 21
+
+    if hours_worked <= 8:
+        regular = hours_worked
+        overtime = 0
     else:
-        regular_hours = 8
-        overtime_hours = total_hours - 8
+        regular = 8
+        overtime = hours_worked - 8
 
-    # حساب الراتب
-    salary = (
-        (regular_hours * regular_hour_rate) +  # الراتب من الساعات العادية
-        (overtime_hours * overtime_hour_rate) +  # الراتب من الساعات الإضافية
-        (friday_hours * friday_hour_rate)  # الراتب من يوم الجمعة
-    )
+    salary = (regular * regular_rate) + (overtime * overtime_rate)
 
-    return salary
+    # إذا كان يوم جمعة، نحسب كل الساعات بسعر الجمعة
+    if is_friday:
+        salary = hours_worked * friday_rate
 
-# حساب الراتب بناءً على المدخلات
-salary = calculate_salary(total_hours, friday_hours)
+    # تحديث الإجماليات
+    st.session_state.total_salary += salary
+    st.session_state.total_hours += hours_worked
+    st.session_state.entries.append({
+        "hours": hours_worked,
+        "is_friday": is_friday,
+        "salary": salary
+    })
 
-# عرض النتيجة
-st.write(f"**الراتب الإجمالي:** {salary:.2f} شيقل")
+    # عرض نتيجة اليوم الحالي
+    st.success(f"تم حساب اليوم: {salary:.2f} شيقل")
+    st.info(f"الإجمالي حتى الآن: {st.session_state.total_salary:.2f} شيقل")
+
+# عرض ملخص المدخلات عند الانتهاء
+if st.session_state.entries:
+    st.subheader("ملخص المدخلات:")
+    for idx, entry in enumerate(st.session_state.entries):
+        day_type = " (جمعة)" if entry["is_friday"] else ""
+        st.write(f"اليوم {idx+1}{day_type}: {entry['hours']} ساعة → {entry['salary']:.2f} شيقل")
+
+    st.subheader("الإجمالي النهائي:")
+    st.markdown(f"**عدد الساعات الكلي:** {st.session_state.total_hours:.2f} ساعة")
+    st.markdown(f"**الراتب الكلي:** {st.session_state.total_salary:.2f} شيقل")
+
+# زر إعادة التعيين
+if st.button("إعادة التشغيل من جديد"):
+    st.session_state.total_salary = 0.0
+    st.session_state.total_hours = 0.0
+    st.session_state.entries = []
+    st.experimental_rerun()

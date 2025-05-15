@@ -1,76 +1,139 @@
 import streamlit as st
+import pandas as pd
+from datetime import datetime
+import os
+import json
 
-# عنوان التطبيق
-st.title("حاسبة الراتب اليومية")
+# --- إعدادات ---
+DATA_FILE = "data.json"
 
-st.write("أدخل عدد الساعات التي عملتها يوميًا، وسنحسب لك الراتب الإجمالي بناءً على القواعد التالية:")
-st.write("- 8 ساعات عادية: 14 شيقل/ساعة")
-st.write("- الساعات الإضافية: 21 شيقل/ساعة (ساعة ونصف)")
-st.write("- يمكنك إضافة ساعات ليوم الجمعة بشكل منفصل (اختياري).")
+# --- دوال المساعدة ---
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f).get("entries", [])
+            return pd.DataFrame(data)
+    else:
+        return pd.DataFrame(columns=[
+            "التاريخ الميلادي", "وقت الدخول", "وقت الخروج",
+            "عدد الساعات", "الساعات العادية", "الساعات الإضافية",
+            "تكلفة العادية", "تكلفة الإضافية", "التكلفة الكلية", "الساعات المحتسبة"
+        ])
 
-# تهيئة الحالة
-if 'total_salary' not in st.session_state:
-    st.session_state.total_salary = 0.0
-if 'total_hours' not in st.session_state:
-    st.session_state.total_hours = 0.0
-if 'entries' not in st.session_state:
-    st.session_state.entries = []
+def save_data(df):
+    data = {"entries": df.to_dict(orient="records")}
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-# تعريف المدخلات
-hours_worked = st.number_input("عدد الساعات التي عملتها اليوم:", min_value=0.0, step=0.5, key="hours_input")
-is_friday = st.checkbox("هل هذا اليوم هو يوم جمعة؟", key="friday_input")
+def time_to_decimal(t):
+    h, m = map(int, t.split(':'))
+    return h + m / 60
 
-# زر الحساب
-if st.button("حساب"):
-    if hours_worked > 0:
-        # الحساب
-        regular_rate = 14
-        overtime_rate = 21
-        friday_rate = 21
+def calculate_hours(entry, exit_time):
+    start = datetime.strptime(entry, "%H:%M")
+    end = datetime.strptime(exit_time, "%H:%M")
+    delta = (end - start).seconds / 3600
+    if delta < 0:
+        delta += 24
+    return round(delta, 2)
 
-        if is_friday:
-            salary = hours_worked * friday_rate
-        else:
-            if hours_worked <= 8:
-                salary = hours_worked * regular_rate
-            else:
-                salary = (8 * regular_rate) + ((hours_worked - 8) * overtime_rate)
+day_map = {
+    "Saturday": "السبت",
+    "Sunday": "الأحد",
+    "Monday": "الاثنين",
+    "Tuesday": "الثلاثاء",
+    "Wednesday": "الأربعاء",
+    "Thursday": "الخميس",
+    "Friday": "الجمعة"
+}
 
-        # التحديث
-        st.session_state.total_salary += salary
-        st.session_state.total_hours += hours_worked
-        st.session_state.entries.append({
-            "hours": hours_worked,
-            "is_friday": is_friday,
-            "salary": salary
-        })
+# --- واجهة المستخدم ---
+st.set_page_config(layout="wide")
+st.title("حاسبة المرتبات - مع دعم JSON")
 
-        # تفريغ الحقل عبر إعادة تشغيل
-        st.experimental_rerun()
+st.markdown("يمكنك إضافة أو تعديل البيانات أدناه. يتم حفظ البيانات في ملف `data.json`. يمكنك إضافة أيام جديدة شهريًا.")
 
-# عرض الملخص
-if st.session_state.entries:
-    st.subheader("ملخص المدخلات:")
-    for idx, entry in enumerate(st.session_state.entries):
-        day_type = " (جمعة)" if entry["is_friday"] else ""
-        st.write(f"اليوم {idx+1}{day_type}: {entry['hours']} ساعة → {entry['salary']:.2f} شيقل")
+# --- تحميل البيانات ---
+df = load_data()
 
-    st.subheader("الإجمالي النهائي:")
-    st.markdown(f"**عدد الساعات الكلي:** {st.session_state.total_hours:.2f} ساعة")
-    st.markdown(f"**الراتب الكلي:** {st.session_state.total_salary:.2f} شيقل")
-    st.markdown(f"**عدد الساعات المضافة:** {len(st.session_state.entries)} يوم/إدخال")
+# --- جدول التحرير ---
+st.subheader("تحرير البيانات")
+edited_df = st.data_editor(
+    df,
+    num_rows="dynamic",
+    column_config={
+        "التاريخ الميلادي": st.column_config.DateColumn("التاريخ الميلادي", format="YYYY-MM-DD"),
+        "وقت الدخول": st.column_config.TimeColumn("وقت الدخول", format="HH:mm"),
+        "وقت الخروج": st.column_config.TimeColumn("وقت الخروج", format="HH:mm")
+    },
+    use_container_width=True
+)
 
-# زر التراجع
-if st.button("التراجع عن الإضافة الأخيرة"):
-    if st.session_state.entries:
-        last_entry = st.session_state.entries.pop()
-        st.session_state.total_salary -= last_entry["salary"]
-        st.session_state.total_hours -= last_entry["hours"]
-        st.success("تم التراجع عن آخر إضافة.")
-        st.experimental_rerun()
+# --- زر الحفظ ---
+if st.button("💾 حفظ البيانات"):
+    save_data(edited_df)
+    st.success("✅ تم حفظ البيانات بنجاح في ملف data.json")
 
-# زر إعادة التشغيل
-if st.button("إعادة التشغيل من جديد"):
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.experimental_rerun()
+# --- تحديث الحسابات ---
+if not edited_df.empty:
+    # إعادة الحساب
+    updated_rows = []
+    for _, row in edited_df.iterrows():
+        date_str = row["التاريخ الميلادي"].strftime("%Y-%m-%d") if not pd.isna(row["التاريخ الميلادي"]) else None
+        entry = row["وقت الدخول"].strftime("%H:%M") if not pd.isna(row["وقت الدخول"]) else None
+        exit_t = row["وقت الخروج"].strftime("%H:%M") if not pd.isna(row["وقت الخروج"]) else None
+
+        if date_str and entry and exit_t:
+            hours_worked = calculate_hours(entry, exit_t)
+            regular = min(hours_worked, 8)
+            extra = max(0, hours_worked - 8)
+            cost_regular = regular * 14
+            cost_extra = extra * 21
+            total_cost = cost_regular + cost_extra
+            counted_hours = regular + extra * 1.5
+
+            updated_rows.append({
+                "التاريخ الميلادي": date_str,
+                "وقت الدخول": entry,
+                "وقت الخروج": exit_t,
+                "عدد الساعات": hours_worked,
+                "الساعات العادية": regular,
+                "الساعات الإضافية": extra,
+                "تكلفة العادية": cost_regular,
+                "تكلفة الإضافية": cost_extra,
+                "التكلفة الكلية": total_cost,
+                "الساعات المحتسبة": counted_hours
+            })
+
+    if updated_rows:
+        df_updated = pd.DataFrame(updated_rows)
+
+        # --- عرض الجدول النهائي ---
+        st.subheader("📊 الجدول النهائي بعد التحديث")
+        st.dataframe(df_updated, use_container_width=True)
+
+        # --- إحصائيات شهرية ---
+        df_updated['الشهر'] = pd.to_datetime(df_updated['التاريخ الميلادي']).dt.to_period('M').astype(str)
+        monthly_stats = df_updated.groupby("الشهر").agg(
+            مجموع_الساعات_العاديه=("الساعات العادية", "sum"),
+            مجموع_الساعات_الإضافية=("الساعات الإضافية", "sum"),
+            مجموع_التكاليف=("التكلفة الكلية", "sum"),
+            مجموع_الساعات_المحتسبه=("الساعات المحتسبة", "sum")
+        ).reset_index()
+
+        st.subheader("📅 إحصائيات شهرية")
+        st.dataframe(monthly_stats, use_container_width=True)
+
+        # --- تنزيل CSV ---
+        @st.cache_data
+        def convert_df(data):
+            return data.to_csv(index=False).encode('utf-8')
+
+        csv_full = convert_df(df_updated)
+        csv_monthly = convert_df(monthly_stats)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button("📥 تحميل الجدول كـ CSV", data=csv_full, file_name="الجدول_النهائي.csv", mime="text/csv")
+        with col2:
+            st.download_button("📅 تحميل الإحصائيات الشهرية", data=csv_monthly, file_name="الاحصائيات_الشهرية.csv", mime="text/csv")

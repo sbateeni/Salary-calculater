@@ -16,7 +16,7 @@ if 'total_hours' not in st.session_state:
 if 'entries' not in st.session_state:
     st.session_state.entries = []
 
-# استخدام مفتاح مميز للحقل، مع عدم استخدام session_state لتغييره يدوياً
+# تعريف المدخلات
 hours_worked = st.number_input("عدد الساعات التي عملتها اليوم:", min_value=0.0, step=0.5, key="hours_input")
 is_friday = st.checkbox("هل هذا اليوم هو يوم جمعة؟", key="friday_input")
 
@@ -45,10 +45,7 @@ if st.button("حساب"):
             "salary": salary
         })
 
-        st.success(f"تم حساب اليوم: {salary:.2f} شيقل")
-        st.info(f"الإجمالي حتى الآن: {st.session_state.total_salary:.2f} شيقل")
-
-        # إعادة ضبط المدخلات باستخدام إعادة التشغيل
+        # تفريغ الحقل عبر إعادة تشغيل
         st.experimental_rerun()
 
 # عرض الملخص
@@ -61,6 +58,7 @@ if st.session_state.entries:
     st.subheader("الإجمالي النهائي:")
     st.markdown(f"**عدد الساعات الكلي:** {st.session_state.total_hours:.2f} ساعة")
     st.markdown(f"**الراتب الكلي:** {st.session_state.total_salary:.2f} شيقل")
+    st.markdown(f"**عدد الساعات المضافة:** {len(st.session_state.entries)} يوم/إدخال")
 
 # زر التراجع
 if st.button("التراجع عن الإضافة الأخيرة"):
